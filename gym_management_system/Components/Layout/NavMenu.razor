@@ -1,0 +1,111 @@
+﻿<div class="top-row ps-3 navbar navbar-dark nice-topbar">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-semibold" href="/">Gym Management</a>
+    </div>
+</div>
+
+<div class="nav-scrollable nice-sidebar">
+    <nav class="flex-column">
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link nice-link" href="" Match="NavLinkMatch.All">
+                <i class="bi bi-house-door-fill me-2"></i> Home
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link nice-link" href="/view-plans">
+                <i class="bi bi-card-list me-2"></i> View plans
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link nice-link" href="/view-members">
+                <i class="bi bi-people-fill me-2"></i> View Members
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link nice-link" href="/add-member">
+                <i class="bi bi-plus-square-fill me-2"></i> Add Member
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link nice-link" href="/add-trainer">
+                <i class="bi bi-person-plus-fill me-2"></i> Register Trainer
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link nice-link" href="/view-trainers">
+                <i class="bi bi-trophy-fill me-2"></i> Best Trainer's
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link nice-link" href="/assign-trainer">
+                <i class="bi bi-person-check-fill me-2"></i> Assign Trainer
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3 mb-3">
+            <NavLink class="nav-link nice-link" href="/attendance">
+                <i class="bi bi-calendar-check-fill me-2"></i> Attendance
+            </NavLink>
+        </div>
+
+    </nav>
+</div>
+
+<style>
+    /* Top bar */
+    .nice-topbar {
+        background: linear-gradient(90deg, #0f172a, #1f2937);
+        border-bottom: 1px solid rgba(255,255,255,.06);
+    }
+
+    /* Sidebar container */
+    .nice-sidebar {
+        background: #0b1220;
+        min-height: 100%;
+        padding-top: .5rem;
+        padding-bottom: 1rem;
+        border-right: 1px solid rgba(255,255,255,.06);
+    }
+
+    /* Links */
+    .nice-link {
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        color: #9aa4b2 !important;
+        border-radius: .5rem;
+        padding: .6rem .85rem;
+        transition: background .15s ease, color .15s ease, transform .05s ease;
+        font-weight: 500;
+    }
+
+        .nice-link:hover {
+            background: rgba(255,255,255,.06);
+            color: #ffffff !important;
+        }
+
+        .nice-link.active {
+            color: #ffffff !important;
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+            box-shadow: 0 6px 18px rgba(37,99,235,.25);
+            transform: translateY(-1px);
+        }
+
+        /* Icons */
+        .nice-link .bi {
+            font-size: 1.05rem;
+        }
+
+    /* Make sidebar scroll if content is long */
+    .nav-scrollable {
+        overflow-y: auto;
+        max-height: calc(100vh - 56px);
+    }
+</style>

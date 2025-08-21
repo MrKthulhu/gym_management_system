@@ -1,0 +1,127 @@
+@*this page has been made
+    for the person's who wants to add themselves 
+    as trainers in the gym
+*@
+@page "/add-trainer"
+@using gym_management_system.Data
+
+<h3 class="mt-3">Add Trainer</h3>
+
+<div class="mb-2">
+    <label>Name:</label>
+    <input class="form-control" @bind="name" />
+</div>
+
+<div class="mb-2">
+    <label>Specialization:</label>
+    <input class="form-control" @bind="specialization" />
+</div>
+
+<button class="btn btn-primary mt-2" @onclick="Add_a_Trainer">Add</button>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-success mt-3">@message</div>
+}
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger mt-3">@error</div>
+}
+
+<h4 class="mt-4">Trainers List</h4>
+
+@if (loading)
+{
+    <p>Loading trainers...</p>
+}
+else if (trainers.Count == 0)
+{
+    <p>No trainers yet.</p>
+}
+else
+{
+    <ul class="mt-2">
+        @foreach (var trainer in trainers)
+        {
+            <li>@trainer.Name - @trainer.Specialization</li>
+        }
+    </ul>
+}
+
+@code {
+    string name = "";
+    string specialization = "";
+    string message = "";
+    string error = "";
+    bool loading = true;
+
+    List<TrainerVm> trainers = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadTrainersAsync();
+    }
+
+    async Task ReloadTrainersAsync()
+    {
+        try
+        {
+            error = "";
+            loading = true;
+            var rows = await Db.GetTrainersAsync(); // must exist in Db.cs
+            trainers = rows.Select(r => new TrainerVm
+            {
+                Name = string.IsNullOrWhiteSpace(r.LastName) ? r.FirstName : $"{r.FirstName} {r.LastName}",
+                Specialization = string.IsNullOrWhiteSpace(r.Specialization) ? "-" : r.Specialization
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            error = "Failed to load trainers from DB. " + ex.Message;
+            trainers.Clear();
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    async Task Add_a_Trainer()
+    {
+        error = "";
+        message = "";
+
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(specialization))
+        {
+            error = "Please enter valid data.";
+            return;
+        }
+
+        try
+        {
+            // Save to DB
+            var id = await Db.AddTrainerAsync(name, specialization);
+
+            // trust DB and reload full list to keep it consistent/sorted
+            await ReloadTrainersAsync();
+
+            // Success message
+            message = $"Trainer '{name}' added successfully!";
+
+            // Clear fields
+            name = string.Empty;
+            specialization = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            error = "Could not add trainer to DB: " + ex.Message;
+        }
+    }
+
+    private sealed class TrainerVm
+    {
+        public string Name { get; set; } = "";
+        public string Specialization { get; set; } = "";
+    }
+}

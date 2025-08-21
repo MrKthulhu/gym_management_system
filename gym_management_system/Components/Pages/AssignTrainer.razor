@@ -1,0 +1,219 @@
+@*this page has been made 
+    to assign a particular trainer 
+    to a particular client in the gym
+    named as member
+*@
+@page "/assign-trainer"
+@using gym_management_system.Data
+
+<h3 class="mt-3">Assign Trainer to Member</h3>
+
+<div class="mb-2">
+    <label>Member (email):</label>
+    <select class="form-control" @bind="selectedMemberEmail">
+        <option value="">-- Select Member --</option>
+        @foreach (var m in memberOptions)
+        {
+            <option value="@m.Email">@m.Label</option>
+        }
+    </select>
+</div>
+
+<div class="mb-2">
+    <label>Trainer:</label>
+    <select class="form-control" @bind="selectedTrainerId">
+        <option value="">-- Select Trainer --</option>
+        @foreach (var t in trainerOptions)
+        {
+            <option value="@t.Id">@t.Label</option>
+        }
+    </select>
+</div>
+
+<button class="btn btn-primary mt-2" @onclick="Assign">Assign</button>
+<button class="btn btn-outline-danger mt-2 ms-2" @onclick="Unassign" disabled="@string.IsNullOrWhiteSpace(selectedMemberEmail)">Unassign</button>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-info mt-3">@message</div>
+}
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger mt-3">@error</div>
+}
+
+<h4 class="mt-4">Assignments</h4>
+
+@if (loading)
+{
+    <p>Loading...</p> 
+}
+else if (assignments.Count == 0)
+{
+    <p>No assignments yet.</p> // Displays empty 
+}
+else
+{
+    // Displays assignments grouped by trainer
+    <ul>
+        @foreach (var g in assignments)
+        {
+            <li>
+                <strong>@g.TrainerName</strong> (@g.Specialization) — @g.Members.Count member(s)
+                <ul>
+                    @foreach (var m in g.Members)
+                    {
+                        <li>@m.Name (@m.Email)</li>
+                    }
+                </ul>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+   
+    bool loading = true;                
+    string message = "";                 
+    string error = "";                   
+
+    string selectedMemberEmail = "";     // Selected member email
+    string selectedTrainerId = "";       // Selected trainer
+
+    List<MemberOpt> memberOptions = new();     // ACTIVE members only
+    List<TrainerOpt> trainerOptions = new();   // All trainers
+    List<TrainerGroupVm> assignments = new();  // Grouped assignments
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadOptionsAsync();        // Loads dropdowns
+            await ReloadAssignmentsAsync();  // Loads grouped list
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    async Task LoadOptionsAsync()
+    {
+        // Trainers
+        var trows = await Db.GetTrainersAsync();
+        trainerOptions = trows
+            .Select(t => new TrainerOpt
+            {
+                Id = t.Id,
+                Label = $"{t.FirstName}{(string.IsNullOrWhiteSpace(t.LastName) ? "" : $" {t.LastName}")} - {t.Specialization ?? "General"}"
+            })
+            .OrderBy(x => x.Label)
+            .ToList();
+
+        // Members with ACTIVE membership only
+        var mrows = await Db.GetMembersAsync();
+        memberOptions = mrows
+            .Where(r => string.Equals(r.MembershipStatus, "ACTIVE", StringComparison.OrdinalIgnoreCase))
+            .Select(r => new MemberOpt
+            {
+                Email = r.Email,
+                Label = $"{(string.IsNullOrWhiteSpace(r.LastName) ? r.FirstName : $"{r.FirstName} {r.LastName}")} ({r.Email})"
+            })
+            .OrderBy(x => x.Label)
+            .ToList();
+    }
+
+    async Task Assign()
+    {
+        try
+        {
+            message = ""; error = "";
+            if (string.IsNullOrWhiteSpace(selectedMemberEmail) || string.IsNullOrWhiteSpace(selectedTrainerId))
+            {
+                error = "Select both a member and a trainer.";
+                return;
+            }
+
+            // Overwrite existing assignment
+            await Db.AssignTrainerAsync(selectedMemberEmail, selectedTrainerId);
+            message = "Trainer assigned.";
+
+            await ReloadAssignmentsAsync(); // Refresh grouped list
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    async Task Unassign()
+    {
+        try
+        {
+            message = ""; error = "";
+            if (string.IsNullOrWhiteSpace(selectedMemberEmail))
+            {
+                error = "Select a member to unassign.";
+                return;
+            }
+
+            await Db.UnassignTrainerAsync(selectedMemberEmail); // Sets trainerId = NULL
+            message = "Trainer unassigned.";
+
+            await ReloadAssignmentsAsync(); // Refresh grouped list
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    async Task ReloadAssignmentsAsync()
+    {
+        var rows = await Db.GetTrainerAssignmentsAsync(onlyActive: true); // ACTIVE members
+        assignments = rows
+            .GroupBy(r => new { r.TrainerId, r.TrainerFirstName, r.TrainerLastName, r.Specialization })
+            .OrderBy(g => g.Key.TrainerFirstName.ToLowerInvariant())
+            .Select(g => new TrainerGroupVm
+            {
+                TrainerId = g.Key.TrainerId,
+                TrainerName = string.IsNullOrWhiteSpace(g.Key.TrainerLastName)
+                    ? g.Key.TrainerFirstName
+                    : $"{g.Key.TrainerFirstName} {g.Key.TrainerLastName}",
+                Specialization = g.Key.Specialization ?? "General",
+                Members = g
+                    .Select(r => new MemberMiniVm
+                    {
+                        Name = string.IsNullOrWhiteSpace(r.MemberLastName)
+                            ? r.MemberFirstName
+                            : $"{r.MemberFirstName} {r.MemberLastName}",
+                        Email = r.MemberEmail
+                    })
+                    .OrderBy(x => x.Name)
+                    .ToList()
+            })
+            .ToList();
+    }
+
+    
+    private sealed class TrainerOpt { public string Id { get; set; } = ""; public string Label { get; set; } = ""; }
+    private sealed class MemberOpt { public string Email { get; set; } = ""; public string Label { get; set; } = ""; }
+
+    private sealed class TrainerGroupVm
+    {
+        public string TrainerId { get; set; } = "";
+        public string TrainerName { get; set; } = "";
+        public string Specialization { get; set; } = "";
+        public List<MemberMiniVm> Members { get; set; } = new();
+    }
+
+    private sealed class MemberMiniVm
+    {
+        public string Name { get; set; } = "";
+        public string Email { get; set; } = "";
+    }
+}

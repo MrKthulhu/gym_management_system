@@ -1,0 +1,33 @@
+{
+  "name": "gym_management_system",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "commonjs",
+
+  "prisma": {
+    "schema": "prisma/schema.prisma",
+    "seed": "node prisma/seed.cjs"
+  },
+
+  "scripts": {
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:gen": "prisma generate",
+    "db:studio": "prisma studio",
+    "db:seed": "prisma db seed",
+    "postinstall": "prisma generate",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+
+  "devDependencies": {
+    "prisma": "^6.14.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.14.0"
+  }
+}

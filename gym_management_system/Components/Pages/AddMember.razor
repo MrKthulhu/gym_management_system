@@ -1,0 +1,208 @@
+﻿@* this page is been made to add new
+    members in the gym as a registration
+*@
+@page "/add-member"
+@using gym_management_system.Components.Models
+@using gym_management_system.Data
+@inject NavigationManager Nav
+
+<h3 class="mt-3">Add Member</h3>
+
+<div class="mb-2">
+    <label>Name:</label>
+    <input class="form-control" @bind="name" />
+</div>
+<div class="mb-2">
+    <label>Age:</label>
+    <input class="form-control" @bind="age" type="number" />
+</div>
+<div class="mb-2">
+    <label>Email:</label>
+    <input class="form-control" @bind="email" />
+</div>
+<div class="mb-2">
+    <label>Plan:</label>
+    <select class="form-control" @bind="selectedPlan">
+        <option value="">-- Select Plan --</option>
+        @foreach (var plan in plans)
+        {
+            <option value="@plan.Name">@($"{plan.Name} - {plan.Duration} - {plan.Price}")</option>
+        }
+    </select>
+</div>
+
+<button class="btn btn-primary mt-2" @onclick="Add_a_Member">Add</button>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-success mt-3">@message</div>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger mt-3">@errorMessage</div>
+}
+
+<h4 class="mt-4">Members List</h4>
+@if (membersLoading)
+{
+    <p>Loading members...</p>
+}
+else if (members.Count == 0)
+{
+    <p>No members found.</p>
+}
+else
+{
+    <ul>
+        @foreach (var member in members)
+        {
+            <li>@member.Name, @member.Age years, @member.Email, Plan: @member.Plan</li>
+        }
+    </ul>
+}
+
+@code {
+    string name = "", email = "", message = "", errorMessage = "", selectedPlan = "";
+    int age;
+
+    bool membersLoading = true;
+
+    Dictionary<string, string> planIdByName = new();
+
+    List<Plan> plans = new()
+    {
+        new Plan { Name = "Basic",    Duration = "3 Months",  Price = "$90"  },
+        new Plan { Name = "Premium",  Duration = "6 Months",  Price = "$100" },
+        new Plan { Name = "Silver",   Duration = "1 Year",    Price = "$160" },
+        new Plan { Name = "Golden",   Duration = "2 Years",   Price = "$190" },
+        new Plan { Name = "Platinum", Duration = "3 Years",   Price = "$250" }
+    };
+
+    List<Member> members = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load PLANS (DB -> fallback to local list)
+        try
+        {
+            var rows = await Db.GetPlansAsync(); // from Data/Db.cs
+            plans = rows.Select(r => new Plan
+            {
+                Name = r.Name,
+                Duration = $"{r.DurationMonths} Months",
+                Price = Db.Money(r.PriceCents)     // "$90.00"
+            }).ToList();
+
+            planIdByName = rows.ToDictionary(r => r.Name, r => r.Id);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to load plans from DB. Using local list. " + ex.Message;
+        }
+
+        // Load MEMBERS from DB
+        await ReloadMembersAsync();
+    }
+
+    async Task ReloadMembersAsync()
+    {
+        membersLoading = true;
+        try
+        {
+            errorMessage = "";
+            var rows = await Db.GetMembersAsync();
+            members = rows.Select(r => new Member
+            {
+                Name = string.IsNullOrWhiteSpace(r.LastName) ? r.FirstName : $"{r.FirstName} {r.LastName}",
+                Age = r.Age,
+                Email = r.Email,
+                Plan = r.PlanName ?? "-"
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            // Keep the UI up, just show the error and clear list
+            errorMessage = "Failed to load members from DB. " + ex.Message;
+            members = new List<Member>();
+        }
+        finally
+        {
+            membersLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    async Task Add_a_Member()
+    {
+        try
+        {
+            errorMessage = "";
+            message = "";
+
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(email) || age <= 0 || string.IsNullOrWhiteSpace(selectedPlan))
+                throw new Exception("Please enter all required data.");
+
+            if (!IsValidEmail(email))
+                throw new Exception("Invalid email format. Please enter a correct email.");
+
+            //  add to the visible list
+            members.Add(new Member
+            {
+                Name = name,
+                Age = age,
+                Email = email,
+                Plan = selectedPlan
+            });
+
+            // Save in DB (uses planId map)
+            await RegisterMemberToDbAsync(name, age, email, selectedPlan);
+
+            // Reload from DB to reflect real state and sorting
+            await ReloadMembersAsync();
+
+            message = $"Member '{name}' added successfully!";
+
+            // Clear fields
+            name = string.Empty;
+            email = string.Empty;
+            age = 0;
+            selectedPlan = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private async Task RegisterMemberToDbAsync(string memberName, int memberAge, string memberEmail, string planName)
+    {
+        try
+        {
+            if (!planIdByName.TryGetValue(planName, out var planId))
+                throw new Exception("Selected plan was not found. Please reload the page.");
+
+            var res = await Db.RegisterMemberAsync(memberName, memberAge, memberEmail, planId);
+            // If we want we can use res up to you guys(res.UserId, res.MembershipId, res.PaymentId)
+        }
+        catch (Exception ex)
+        {
+            // Don’t break the UI just report DB failure
+            errorMessage = "Saved locally, but DB save failed: " + ex.Message;
+            StateHasChanged();
+        }
+    }
+
+    bool IsValidEmail(string email)
+    {
+        try
+        {
+            var addr = new System.Net.Mail.MailAddress(email);
+            return addr.Address == email;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+}

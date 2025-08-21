@@ -1,0 +1,129 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+  TRAINER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+model User {
+  id       String  @id @default(cuid())
+  email    String  @unique
+  password String?
+  role     Role    @default(MEMBER)
+
+  firstName   String
+  lastName    String?
+  age         Int // required 
+  phoneNumber String?
+
+  // exactly one trainer per member; trainers can have many members
+  trainerId String?
+  trainer   User?   @relation("TrainerMembers", fields: [trainerId], references: [id])
+  members   User[]  @relation("TrainerMembers") // when this user is the TRAINER
+  specialization String? 
+  // relations
+  memberships Membership[]
+  attendance  Attendance[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  Session   Session[]
+}
+
+model Plan {
+  id             String  @id @default(cuid())
+  name           String  @unique
+  durationMonths Int
+  priceCents     Int
+  isActive       Boolean @default(true)
+
+  memberships Membership[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Membership {
+  id         String           @id @default(cuid())
+  userId     String
+  planId     String
+  status     MembershipStatus @default(ACTIVE)
+  startDate  DateTime         @default(now())
+  endDate    DateTime?
+  priceCents Int?
+
+  user    User     @relation(fields: [userId], references: [id])
+  plan    Plan     @relation(fields: [planId], references: [id])
+  payment Payment?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// A class/session you can take attendance against (per-session attendance)
+model Session {
+  id        String    @id @default(cuid())
+  trainerId String?
+  startAt   DateTime
+  endAt     DateTime?
+  title     String?
+
+  trainer    User?        @relation(fields: [trainerId], references: [id])
+  attendance Attendance[]
+
+  createdAt DateTime @default(now())
+}
+
+model Attendance {
+  id        String  @id @default(cuid())
+  userId    String
+  sessionId String
+  notes     String?
+
+  user    User    @relation(fields: [userId], references: [id])
+  session Session @relation(fields: [sessionId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  // one record per member per session; immutable in app logic
+  @@unique([userId, sessionId])
+}
+
+// Payment details for a membership
+model Payment {
+  id           String        @id @default(cuid())
+  membershipId String        @unique
+  amountCents  Int
+  currencyCode String        @default("CAD")
+  status       PaymentStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+
+  membership Membership @relation(fields: [membershipId], references: [id])
+}

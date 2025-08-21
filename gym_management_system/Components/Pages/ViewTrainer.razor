@@ -1,0 +1,77 @@
+@*this page has been made
+    to view and rank trainers by number of active members
+    they are currently training, (desc order)
+*@
+@page "/view-trainers"
+@using gym_management_system.Components.Models
+@using gym_management_system.Data
+
+<h3 class="mt-3">Best trainer's Ranked by # of Members</h3>
+
+@if (trainers.Count == 0)
+{
+    <p>No trainers found.</p>
+}
+else
+{
+    <ul class="list-group">
+        @foreach (var trainer in trainers)
+        {
+            <li class="list-group-item">
+                <strong>@trainer.Name</strong> – @trainer.Specialization
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    // Default manual list (fallback)
+    List<Trainer> trainers = new()
+    {
+        new Trainer { Name = "Zoya",  Specialization = "Cardio" },
+        new Trainer { Name = "David", Specialization = "Zumba" },
+        new Trainer { Name = "Ricky", Specialization = "Strength Training" },
+        new Trainer { Name = "Thia",  Specialization = "Yoga" },
+        new Trainer { Name = "John",  Specialization = "Cardio" },
+        new Trainer { Name = "Rita",  Specialization = "Strength Training" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Loads trainers
+            var trows = await Db.GetTrainersAsync();
+
+            if (trows.Count == 0)
+                return;
+
+            // Ranks by active members
+            var assigns = await Db.GetTrainerAssignmentsAsync(onlyActive: true);
+            var counts = assigns
+                .GroupBy(a => a.TrainerId)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            var ordered = trows
+                .Select(t => new
+                {
+                    Id = t.Id,
+                    Name = string.IsNullOrWhiteSpace(t.LastName) ? t.FirstName : $"{t.FirstName} {t.LastName}",
+                    Spec = string.IsNullOrWhiteSpace(t.Specialization) ? "General" : t.Specialization,
+                    Cnt = counts.TryGetValue(t.Id, out var c) ? c : 0
+                })
+                .OrderByDescending(x => x.Cnt)
+                .ThenBy(x => x.Name.ToLowerInvariant())
+                .ToList();
+
+            // Displays trainers (ranked)
+            trainers = ordered
+                .Select(x => new Trainer { Name = x.Name, Specialization = x.Spec })
+                .ToList();
+        }
+        catch
+        {
+            // Uses manual list if DB not available
+        }
+    }
+}

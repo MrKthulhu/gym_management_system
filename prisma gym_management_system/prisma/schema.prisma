@@ -1,0 +1,143 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+  TRAINER // you can keep this if trainers also log in as users; otherwise it's harmless
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+model User {
+  id         String  @id @default(cuid())
+  email      String  @unique
+  password   String?
+  role       Role    @default(MEMBER)
+
+  firstName   String
+  lastName    String?
+  age         Int
+  phoneNumber String?
+
+  // each member has exactly one trainer (optional), now references Trainer table
+  trainerId String?
+  trainer   Trainer? @relation(fields: [trainerId], references: [id])
+
+  // relations
+  memberships Membership[]
+  attendance  Attendance[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  // removed: Session[] (sessions belong to Trainer now)
+  // removed: self-relation members[]
+  // removed: specialization (moved to Trainer)
+}
+
+model Trainer {
+  id             String   @id @default(cuid())
+  firstName      String
+  lastName       String?
+  specialization String
+  email          String?  @unique
+  phoneNumber    String?
+
+  // back-refs
+  members  User[]      // users referencing this trainer
+  sessions Session[]   // sessions taught by this trainer
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Plan {
+  id             String  @id @default(cuid())
+  name           String  @unique
+  durationMonths Int
+  priceCents     Int
+  isActive       Boolean @default(true)
+
+  memberships Membership[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Membership {
+  id         String           @id @default(cuid())
+  userId     String
+  planId     String
+  status     MembershipStatus @default(ACTIVE)
+  startDate  DateTime         @default(now())
+  endDate    DateTime?
+  priceCents Int?
+
+  user    User     @relation(fields: [userId], references: [id])
+  plan    Plan     @relation(fields: [planId], references: [id])
+  payment Payment?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  trainerId String?
+  startAt   DateTime
+  endAt     DateTime?
+  title     String?
+
+  // now references Trainer (not User)
+  trainer    Trainer?     @relation(fields: [trainerId], references: [id])
+  attendance Attendance[]
+
+  createdAt DateTime @default(now())
+}
+
+model Attendance {
+  id        String  @id @default(cuid())
+  userId    String
+  sessionId String
+  notes     String?
+
+  user    User    @relation(fields: [userId], references: [id])
+  session Session @relation(fields: [sessionId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, sessionId])
+}
+
+model Payment {
+  id           String        @id @default(cuid())
+  membershipId String        @unique
+  amountCents  Int
+  currencyCode String        @default("CAD")
+  status       PaymentStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+
+  membership Membership @relation(fields: [membershipId], references: [id])
+}

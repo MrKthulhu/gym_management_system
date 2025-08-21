@@ -1,0 +1,130 @@
+@*this page has been made 
+    to view the members those who are
+    already registered as clients
+*@
+@page "/view-members"
+@using gym_management_system.Data
+
+<h3>Gym Members</h3>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <!-- // Error message -->
+    <div class="alert alert-danger">@error</div>
+}
+else if (loading)
+{
+    <!-- // Loading -->
+    <p>Loading...</p>
+}
+else
+{
+    <!-- // Displays members -->
+    <table class="member-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Age</th>
+                <th>Email</th>
+                <th>Plan</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Started</th>
+                <th>Ends</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var m in members)
+            {
+                <tr>
+                    <td>@m.Name</td>
+                    <td>@m.Age</td>
+                    <td>@m.Email</td>
+                    <td>@m.Plan</td>
+                    <td>@(m.PriceCents.HasValue? Db.Money(m.PriceCents.Value) : "-")</td>
+                    <td>@(m.Status ?? "-")</td>
+                    <td>@(m.Started ?? "-")</td>
+                    <td>@(m.Ends ?? "-")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<style>
+    /* // Table styles */
+    .member-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+
+        .member-table th, .member-table td {
+            border: 1px solid #ddd;
+            padding: 12px 20px;
+            text-align: left;
+        }
+
+        .member-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+
+        .member-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .member-table tr:hover {
+            background-color: #e6f7ff;
+        }
+</style>
+
+@code {
+    // State
+    private bool loading = true;        // Tracks loading
+    private string error = "";          // Error message
+    private List<MemberVm> members = new(); // Members from DB
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Loads members from DB
+            var rows = await Db.GetMembersAsync();
+            members = rows.Select(r => new MemberVm
+            {
+                Name = string.IsNullOrWhiteSpace(r.LastName) ? r.FirstName : $"{r.FirstName} {r.LastName}",
+                Age = r.Age,
+                Email = r.Email,
+                // Plan shown as-is (can be empty)
+                Plan = r.PlanName,
+                PriceCents = r.PriceCents,
+                Status = r.MembershipStatus,
+                Started = r.StartDate?.ToString("yyyy-MM-dd"),
+                Ends = r.EndDate?.ToString("yyyy-MM-dd")
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            // Captures DB errors
+            error = "Failed to load members from DB. " + ex.Message;
+        }
+        finally
+        {
+            loading = false; // Done loading
+        }
+    }
+
+    // View model
+    private sealed class MemberVm
+    {
+        public string Name { get; set; } = "";
+        public int Age { get; set; }
+        public string Email { get; set; } = "";
+        public string? Plan { get; set; }
+        public int? PriceCents { get; set; }
+        public string? Status { get; set; }
+        public string? Started { get; set; }
+        public string? Ends { get; set; }
+    }
+}

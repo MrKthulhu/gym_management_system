@@ -1,0 +1,219 @@
+@*this page has been made 
+    to keep the attendance record
+    of the members
+*@
+@page "/attendance"
+@using gym_management_system.Data
+
+<h3 class="mt-3">Mark Attendance</h3>
+
+<div class="mb-2">
+    <label>Member (Name (email)):</label>
+    <input class="form-control" list="memberList" @bind="memberText" />
+    <datalist id="memberList">
+        @foreach (var m in memberOptions)
+        {
+            <option value="@m.Label"></option>
+        }
+    </datalist>
+</div>
+
+<button class="btn btn-success" @onclick="MarkAttendance">Present</button>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-info mt-3">@message</div>
+}
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger mt-3">@error</div>
+}
+
+<h4 class="mt-4">Today's Attendance</h4>
+@if (todayLoading)
+{
+    <p>Loading...</p> @* // Loading *@
+}
+else if (todayAttendance.Count == 0)
+{
+    <p>No one marked present today.</p> @* // Display empty *@
+}
+else
+{
+    <ul>
+        @foreach (var r in todayAttendance)
+        {
+            <li>@r.Name (@r.Email) - @r.TimeLocal</li> @* // Displays today's marks in MDT *@
+        }
+    </ul>
+}
+
+<h4 class="mt-4">Attendance Records</h4>
+@if (recentLoading)
+{
+    <p>Loading...</p>
+}
+else if (recentAttendance.Count == 0)
+{
+    <p>No recent attendance.</p>
+}
+else
+{
+    <ul>
+        @foreach (var r in recentAttendance)
+        {
+            <li>@r.Name (@r.Email) - @r.TimeLocal</li> @* // Displays recent *@
+        }
+    </ul>
+}
+
+@code {
+    // State
+    string memberText = "";                 // Input: "Name (email)"
+    string message = "";                    // Info message
+    string error = "";                      // Error message
+
+    bool todayLoading = true;               // Loading today
+    bool recentLoading = true;              // Loading recent
+
+    List<MemberOpt> memberOptions = new();  // ACTIVE members (Name (email))
+    List<AttendanceVm> todayAttendance = new();
+    List<AttendanceVm> recentAttendance = new();
+
+    readonly string TzId = "America/Edmonton"; // MDT (Calgary)
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Load ACTIVE members for the picker
+            var rows = await Db.GetMembersAsync(); // latest membership per user
+            memberOptions = rows
+                .Where(r => string.Equals(r.MembershipStatus, "ACTIVE", StringComparison.OrdinalIgnoreCase))
+                .Select(r => new MemberOpt
+                {
+                    Email = r.Email,
+                    Label = $"{(string.IsNullOrWhiteSpace(r.LastName) ? r.FirstName : $"{r.FirstName} {r.LastName}")} ({r.Email})"
+                })
+                .OrderBy(x => x.Label)
+                .ToList();
+
+            // Load today's and recent
+            await ReloadTodayAsync();
+            await ReloadRecentAsync();
+        }
+        catch (Exception ex)
+        {
+            error = "Failed to load data. " + ex.Message;
+        }
+    }
+
+    async Task MarkAttendance()
+    {
+        message = ""; error = "";
+
+        // Parse email from "Name (email)" or allow raw email
+        var email = ExtractEmail(memberText);
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            error = "Please select a member as 'Name (email)' or enter a valid email.";
+            return;
+        }
+
+        try
+        {
+            // Use local (MDT) time to determine today's session
+            var nowLocal = TimeZoneInfo.ConvertTime(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(TzId));
+
+            // Mark attendance for today's session (per trainer, per day)
+            var res = await Db.MarkAttendanceTodayAsync(email, nowLocal);
+
+            message = res.AlreadyMarked
+                ? "Already marked present for today."
+                : "Attendance marked.";
+
+            // Refresh lists
+            await ReloadTodayAsync();
+            await ReloadRecentAsync();
+
+            // Clear input
+            memberText = "";
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    async Task ReloadTodayAsync()
+    {
+        todayLoading = true;
+        try
+        {
+            var nowLocal = TimeZoneInfo.ConvertTime(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(TzId));
+            var rows = await Db.GetTodayAttendanceAsync(nowLocal);
+
+            todayAttendance = rows
+                .Select(r => new AttendanceVm
+                {
+                    Name = string.IsNullOrWhiteSpace(r.LastName) ? r.FirstName : $"{r.FirstName} {r.LastName}",
+                    Email = r.Email,
+                    TimeLocal = ToLocalString(r.AttendanceAtUtc)
+                })
+                .ToList();
+        }
+        finally
+        {
+            todayLoading = false;
+        }
+    }
+
+    async Task ReloadRecentAsync()
+    {
+        recentLoading = true;
+        try
+        {
+            var rows = await Db.GetRecentAttendanceAsync(50); // last 50
+            recentAttendance = rows
+                .Select(r => new AttendanceVm
+                {
+                    Name = string.IsNullOrWhiteSpace(r.LastName) ? r.FirstName : $"{r.FirstName} {r.LastName}",
+                    Email = r.Email,
+                    TimeLocal = ToLocalString(r.AttendanceAtUtc)
+                })
+                .ToList();
+        }
+        finally
+        {
+            recentLoading = false;
+        }
+    }
+
+    string ToLocalString(DateTime utc)
+    {
+        var tz = TimeZoneInfo.FindSystemTimeZoneById(TzId);
+        var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), tz);
+        return local.ToString("g"); // // MDT "g" format
+    }
+
+    static string? ExtractEmail(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return null;
+        var at = input.IndexOf('@');
+        if (at >= 0) // looks like an email somewhere
+        {
+            // Prefer "(email)" if present
+            var l = input.LastIndexOf('(');
+            var r = input.LastIndexOf(')');
+            if (l >= 0 && r > l) return input.Substring(l + 1, r - l - 1).Trim();
+            // Otherwise use the raw token containing '@'
+            return input.Trim();
+        }
+        // No '@' — can't resolve uniquely
+        return null;
+    }
+
+    // VMs
+    private sealed class MemberOpt { public string Email { get; set; } = ""; public string Label { get; set; } = ""; }
+    private sealed class AttendanceVm { public string Name { get; set; } = ""; public string Email { get; set; } = ""; public string TimeLocal { get; set; } = ""; }
+}
